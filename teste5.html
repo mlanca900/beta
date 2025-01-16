@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leitor de Numeração ULD</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        video {
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 20px;
+        }
+        canvas {
+            display: none;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        #registos {
+            margin-top: 20px;
+            text-align: left;
+        }
+        #registos ul {
+            list-style-type: disc;
+            padding-left: 20px;
+        }
+        #registos ul li {
+            padding: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        #registos ul li input[type="text"] {
+            font-size: 16px;
+            padding: 5px;
+            width: 120px;
+            margin-right: 10px;
+        }
+        #registos ul li input[type="text"].numero {
+            width: 50px; /* Campo menor para números */
+        }
+        #registos ul li input[type="text"].texto {
+            width: 120px; /* Campo maior para texto */
+        }
+        #registos ul li button {
+            font-size: 14px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Leitor de Numeração ULD</h1>
+    <video id="camera" autoplay playsinline></video>
+    <canvas id="snapshot"></canvas>
+    <button id="capture">Capturar</button>
+    <div id="registos">
+        <h2>Registos:</h2>
+        <ul id="lista"></ul>
+    </div>
+
+    <script>
+        const video = document.getElementById('camera');
+        const canvas = document.getElementById('snapshot');
+        const captureButton = document.getElementById('capture');
+        const lista = document.getElementById('lista');
+
+        // Função para aceder à câmara
+        async function iniciarCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Erro ao aceder à câmara:", err);
+                alert("Não foi possível aceder à câmara. Verifique as permissões e se está a usar HTTPS.");
+            }
+        }
+
+        iniciarCamera();
+
+        // Capturar a imagem e processar o OCR
+        captureButton.addEventListener('click', () => {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Definir as coordenadas da região de interesse (ROI)
+            const roiX = canvas.width * 0.3; // Ajusta conforme necessário
+            const roiY = canvas.height * 0.4;
+            const roiWidth = canvas.width * 0.4;
+            const roiHeight = canvas.height * 0.2;
+
+            // Criar um novo canvas para a ROI
+            const roiCanvas = document.createElement('canvas');
+            roiCanvas.width = roiWidth;
+            roiCanvas.height = roiHeight;
+            const roiContext = roiCanvas.getContext('2d');
+            roiContext.drawImage(canvas, roiX, roiY, roiWidth, roiHeight, 0, 0, roiWidth, roiHeight);
+
+            // Converter a imagem recortada para texto usando Tesseract.js
+            Tesseract.recognize(roiCanvas, 'eng', {
+                logger: (info) => console.log(info),
+            }).then(({ data: { text } }) => {
+                // Filtrar o texto com base no padrão
+                const pattern = /\b(AKE|AKH)\w*(5K|R7|FF)\b/; // Regex para encontrar o texto
+                const match = text.match(pattern);
+
+                if (match) {
+                    adicionarRegisto(match[0]); // Adicionar o texto encontrado à lista
+                } else {
+                    alert("Texto não encontrado ou inválido.");
+                }
+            }).catch((err) => {
+                console.error("Erro no reconhecimento OCR:", err);
+                alert("Erro ao reconhecer o texto.");
+            });
+        });
+
+        // Adicionar registo à lista com campo para texto e número
+        function adicionarRegisto(texto) {
+            const item = document.createElement('li');
+
+            // Campo de texto editável para o registo
+            const inputTexto = document.createElement('input');
+            inputTexto.type = 'text';
+            inputTexto.classList.add('texto');
+            inputTexto.value = texto;
+
+            // Campo de texto para a posição (permite texto e número)
+            const inputPosicao = document.createElement('input');
+            inputPosicao.type = 'text';
+            inputPosicao.classList.add('numero');
+            inputPosicao.placeholder = 'Posição';
+
+            // Botão de confirmação
+            const confirmar = document.createElement('button');
+            confirmar.textContent = 'OK';
+
+            // Atualizar o valor ao clicar em "OK"
+            confirmar.addEventListener('click', () => {
+                const valorTexto = inputTexto.value.trim();
+                const valorPosicao = inputPosicao.value.trim();
+                if (valorTexto && valorPosicao) {
+                    item.textContent = ''; // Limpar o conteúdo
+                    item.appendChild(inputTexto);
+                    item.appendChild(inputPosicao);
+                    item.appendChild(confirmar);
+                    item.querySelector('button').textContent = 'Confirmado';
+                } else {
+                    alert('Preencha todos os campos');
+                }
+            });
+
+            item.appendChild(inputTexto);
+            item.appendChild(inputPosicao);
+            item.appendChild(confirmar);
+            lista.appendChild(item);
+
+            // Focar no primeiro campo automaticamente
+            inputTexto.focus();
+        }
+    </script>
+</body>
+</html>
